@@ -1,3 +1,5 @@
 flask
-openai
+flask-cors
+gunicorn
 python-dotenv
+openai
