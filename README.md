@@ -93,8 +93,6 @@ gamma-ai-phone-assistant/
 
 ## Screenshots
 
-Add screenshots of the application here.
-
 ### Home Screen
 
 ![Home Screen](screenshots/home.png)
@@ -102,10 +100,6 @@ Add screenshots of the application here.
 ### Chat Interface
 
 ![Chat Interface](screenshots/chat.png)
-
-### Voice Assistant
-
-![Voice Assistant](screenshots/voice.png)
 
 ## Installation
 
