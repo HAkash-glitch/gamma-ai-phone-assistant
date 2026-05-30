@@ -95,11 +95,11 @@ gamma-ai-phone-assistant/
 
 ### Home Screen
 
-![Home Screen](screenshots/home.png)
+![Home Screen](screenshots/home.jpeg)
 
 ### Chat Interface
 
-![Chat Interface](screenshots/chat.png)
+![Chat Interface](screenshots/chat.png.jpeg)
 
 ## Installation
 
