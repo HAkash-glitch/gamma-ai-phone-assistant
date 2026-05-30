@@ -1,0 +1,4 @@
+.env
+ai-assistant-backend/.env
+__pycache__/
+*.pyc
