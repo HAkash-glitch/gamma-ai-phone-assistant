@@ -53,29 +53,7 @@ def memory():
 
     memory_data = load_memory()
 
-    if msg.startswith("remember that "):
-        note = command[len("remember that "):].strip()
-
-        if not note:
-            return jsonify({"reply": "Tell me what to remember."})
-
-        memory_data.setdefault("notes", []).append(note)
-        save_memory(memory_data)
-
-        return jsonify({"reply": "Okay, I will remember that."})
-
-    if msg.startswith("remember my name is "):
-        name = command[len("remember my name is "):].strip()
-
-        if not name:
-            return jsonify({"reply": "Tell me your name first."})
-
-        memory_data["name"] = name
-        save_memory(memory_data)
-
-        return jsonify({"reply": f"Got it. I will remember your name is {name}."})
-
-    if msg in ["what do you remember", "show memory", "show my memory"]:
+    if "what do you remember" in msg or "show memory" in msg or "show my memory" in msg:
         if not memory_data:
             return jsonify({"reply": "I don't remember anything yet."})
 
@@ -92,12 +70,52 @@ def memory():
 
         return jsonify({"reply": "\n".join(lines)})
 
-    if msg in ["clear memory", "forget everything", "forget my memory"]:
+    if "clear memory" in msg or "forget everything" in msg or "forget my memory" in msg:
         save_memory({})
         return jsonify({"reply": "Cloud memory cleared."})
 
-    return jsonify({"reply": None})
+    if msg.startswith("remember my name is "):
+        name = command[len("remember my name is "):].strip()
+        if not name:
+            return jsonify({"reply": "Tell me your name first."})
 
+        memory_data["name"] = name
+        save_memory(memory_data)
+        return jsonify({"reply": f"Got it. I will remember your name is {name}."})
+
+    if msg.startswith("my name is "):
+        name = command[len("my name is "):].strip()
+        if not name:
+            return jsonify({"reply": "Tell me your name first."})
+
+        memory_data["name"] = name
+        save_memory(memory_data)
+        return jsonify({"reply": f"Nice to meet you, {name}. I will remember your name."})
+
+    if "remember" in msg:
+        note = command
+
+        cleanup_phrases = [
+            "remember that",
+            "remember this",
+            "remember it",
+            "please remember",
+            "can you remember",
+            "remember",
+        ]
+
+        for phrase in cleanup_phrases:
+            note = note.replace(phrase, "", 1).strip()
+            note = note.replace(phrase.capitalize(), "", 1).strip()
+
+        if not note:
+            return jsonify({"reply": "Tell me what to remember."})
+
+        memory_data.setdefault("notes", []).append(note)
+        save_memory(memory_data)
+        return jsonify({"reply": "Okay, I will remember that."})
+
+    return jsonify({"reply": None})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
