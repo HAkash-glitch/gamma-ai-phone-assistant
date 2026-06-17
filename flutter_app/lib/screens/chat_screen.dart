@@ -8,7 +8,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:animated_text_kit/animated_text_kit.dart';
 import '../models/message_model.dart';
 import '../services/api_service.dart';
 import '../services/command_service.dart';
@@ -35,17 +34,19 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<MessageModel> _messages = [];
 
   @override
-  void initState() {
-    super.initState();
-    _setupTts();
-    _loadMessages();
-  }
+@override
+void initState() {
+  super.initState();
+  _setupTts();
+  _loadMessages();
+}
 
-  void _setupTts() {
-    _tts.setLanguage("en-US");
-    _tts.setSpeechRate(0.45);
-    _tts.setPitch(1.0);
-  }
+Future<void> _setupTts() async {
+  await _tts.setLanguage("en-US");
+  await _tts.setSpeechRate(0.52);
+  await _tts.setPitch(1.0);
+  await _tts.awaitSpeakCompletion(true);
+}
 
   Future<void> _loadMessages() async {
     final prefs = await SharedPreferences.getInstance();
@@ -95,67 +96,67 @@ class _ChatScreenState extends State<ChatScreen> {
     _messages.add(MessageModel(text: text, isUser: false));
   }
 
-  Future<void> _startListening() async {
-    if (_isListening || _isLoading) return;
+ Future<void> _startListening() async {
+  if (_isListening || _isLoading) return;
 
-    await _tts.stop();
+  await _tts.stop();
 
-    final available = await _speech.initialize(
-      onStatus: (status) {
-        if (status == "done" || status == "notListening") {
-          if (mounted) setState(() => _isListening = false);
-        }
-      },
-      onError: (error) {
-        if (mounted) {
-          setState(() {
-            _isListening = false;
-            _addBotMessage("Voice error. Please try again.");
-          });
-        }
-      },
-    );
+  final available = await _speech.initialize(
+    onStatus: (status) async {
+      if (status == "done" || status == "notListening") {
+        if (mounted) setState(() => _isListening = false);
+      }
+    },
+    onError: (error) {
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _addBotMessage("Voice error. Please try again.");
+        });
+      }
+    },
+  );
 
-    if (!available) {
-      setState(() {
-        _addBotMessage("Microphone permission not available");
-      });
-      await _saveMessages();
-      return;
-    }
+  if (!available) {
+    setState(() {
+      _addBotMessage("Microphone permission not available");
+    });
+    await _saveMessages();
+    return;
+  }
 
-    setState(() => _isListening = true);
+  setState(() => _isListening = true);
 
-    await _speech.listen(
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 3),
-      partialResults: false,
-      listenMode: stt.ListenMode.dictation,
-      onResult: (result) async {
-        if (!result.finalResult) return;
+  await _speech.listen(
+    listenFor: const Duration(seconds: 30),
+    pauseFor: const Duration(seconds: 4),
+    partialResults: true,
+    listenMode: stt.ListenMode.dictation,
+    onResult: (result) async {
+      String spoken = result.recognizedWords.trim();
+      if (spoken.isEmpty) return;
 
-        String spoken = result.recognizedWords.trim();
-        if (spoken.isEmpty) return;
+      final lower = spoken.toLowerCase();
 
-        final lower = spoken.toLowerCase();
-
-        if (lower.contains("hey gamma")) {
-          spoken = lower.split("hey gamma").last.trim();
-        }
-
-        if (spoken.isEmpty) {
-          await _tts.speak("Yes, I am listening");
-          return;
-        }
-
+      if (lower.contains("hey gamma")) {
         await _speech.stop();
+
+        String command = lower.split("hey gamma").last.trim();
 
         if (mounted) setState(() => _isListening = false);
 
-        await _runText(spoken);
-      },
-    );
-  }
+        if (command.isEmpty) {
+          await _tts.speak("Yes Akash, how can I help?");
+          await Future.delayed(const Duration(seconds: 2));
+          await _startListening();
+          return;
+        }
+
+        await _runText(command);
+      }
+    },
+  );
+}
 
   Future<void> _stopListening() async {
     await _speech.stop();
@@ -184,111 +185,97 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<bool> _handleCommand(String text) async {
-    final reminderReply = await ReminderService.handleReminderCommand(text);
+  final cmd = text.toLowerCase().trim();
 
-    if (reminderReply != null) {
-      setState(() => _addBotMessage(reminderReply));
-      await _tts.speak(reminderReply);
-      return true;
-    }
+  // ✅ Clear chat must be FIRST
+  if (cmd == "clear chat" ||
+      cmd == "clear chart" ||
+      cmd == "delete chat" ||
+      cmd == "delete conversation" ||
+      cmd == "delete our conversation" ||
+      cmd == "clear messages" ||
+      cmd == "clear all messages" ||
+      cmd == "clear all messages on screen") {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('chat_history');
 
-    final memoryReply = await MemoryService.handleMemoryCommand(text);
+    setState(() {
+      _messages.clear();
+      _messages.add(
+        MessageModel(
+          text: "Chat cleared. I am Gamma Assistant 🚀",
+          isUser: false,
+        ),
+      );
+      _isLoading = false;
+    });
 
-    if (memoryReply != null) {
-      setState(() => _addBotMessage(memoryReply));
-      await _tts.speak(memoryReply);
-      return true;
-    }
-
-    final localReply = await CommandService.handleCommand(text);
-
-    if (localReply != null) {
-      setState(() => _addBotMessage(localReply));
-      await _tts.speak(localReply);
-      return true;
-    }
-
-    final cmd = text.toLowerCase().trim();
-
-    if (cmd.contains("flashlight on") || cmd.contains("torch on")) {
-      try {
-        await TorchLight.enableTorch();
-        setState(() => _addBotMessage("Flashlight turned ON"));
-        await _tts.speak("Flashlight on");
-      } catch (e) {
-        setState(() => _addBotMessage("Flashlight not available"));
-        await _tts.speak("Flashlight not available");
-      }
-      return true;
-    }
-
-    if (cmd.contains("flashlight off") || cmd.contains("torch off")) {
-      try {
-        await TorchLight.disableTorch();
-        setState(() => _addBotMessage("Flashlight turned OFF"));
-        await _tts.speak("Flashlight off");
-      } catch (e) {
-        setState(() => _addBotMessage("Could not turn off flashlight"));
-        await _tts.speak("Could not turn off flashlight");
-      }
-      return true;
-    }
-
-    if (cmd.startsWith("search for ")) {
-      final query = cmd.replaceFirst("search for ", "").trim();
-      if (query.isNotEmpty) {
-        await _openUrl(
-          "https://www.google.com/search?q=${Uri.encodeComponent(query)}",
-        );
-        setState(() => _addBotMessage("Searching for $query"));
-        await _tts.speak("Searching for $query");
-        return true;
-      }
-    }
-
-    if (cmd.startsWith("play ")) {
-      final query = cmd.replaceFirst("play ", "").trim();
-      if (query.isNotEmpty) {
-        await _openUrl(
-          "https://www.youtube.com/results?search_query=${Uri.encodeComponent(query)}",
-        );
-        setState(() => _addBotMessage("Playing $query"));
-        await _tts.speak("Playing $query");
-        return true;
-      }
-    }
-
-    if (cmd.startsWith("navigate to ")) {
-      final place = cmd.replaceFirst("navigate to ", "").trim();
-      if (place.isNotEmpty) {
-        await _openUrl(
-          "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place)}",
-        );
-        setState(() => _addBotMessage("Navigating to $place"));
-        await _tts.speak("Navigating to $place");
-        return true;
-      }
-    }
-
-    if (cmd.startsWith("call ")) {
-      final number = cmd.replaceFirst("call ", "").trim();
-      if (number.isNotEmpty) {
-        await _openUrl("tel:$number");
-        setState(() => _addBotMessage("Calling $number"));
-        await _tts.speak("Calling $number");
-        return true;
-      }
-    }
-
-    if (cmd.contains("send sms")) {
-      await _openUrl("sms:");
-      setState(() => _addBotMessage("Opening SMS app"));
-      await _tts.speak("Opening SMS app");
-      return true;
-    }
-
-    return false;
+    await _saveMessages();
+    _scrollToBottom();
+    await _tts.speak("Chat cleared");
+    return true;
   }
+
+  final reminderReply = await ReminderService.handleReminderCommand(text);
+
+  if (reminderReply != null) {
+    setState(() => _addBotMessage(reminderReply));
+    await _tts.speak(reminderReply);
+    return true;
+  }
+
+ final memoryReply = await MemoryService.handleMemoryCommand(text);
+
+if (memoryReply != null) {
+  setState(() => _addBotMessage(memoryReply));
+  await _tts.speak(memoryReply);
+  return true;
+}
+
+final cloudMemoryReply = await ApiService.sendMemoryCommand(text);
+
+if (cloudMemoryReply != null &&
+    cloudMemoryReply != "null" &&
+    cloudMemoryReply.isNotEmpty) {
+  setState(() => _addBotMessage(cloudMemoryReply));
+  await _tts.speak(cloudMemoryReply);
+  return true;
+}
+
+  final localReply = await CommandService.handleCommand(text);
+
+  if (localReply != null) {
+    setState(() => _addBotMessage(localReply));
+    await _tts.speak(localReply);
+    return true;
+  }
+
+  if (cmd.contains("flashlight on") || cmd.contains("torch on")) {
+    try {
+      await TorchLight.enableTorch();
+      setState(() => _addBotMessage("Flashlight turned ON"));
+      await _tts.speak("Flashlight on");
+    } catch (e) {
+      setState(() => _addBotMessage("Flashlight not available"));
+      await _tts.speak("Flashlight not available");
+    }
+    return true;
+  }
+
+  if (cmd.contains("flashlight off") || cmd.contains("torch off")) {
+    try {
+      await TorchLight.disableTorch();
+      setState(() => _addBotMessage("Flashlight turned OFF"));
+      await _tts.speak("Flashlight off");
+    } catch (e) {
+      setState(() => _addBotMessage("Could not turn off flashlight"));
+      await _tts.speak("Could not turn off flashlight");
+    }
+    return true;
+  }
+
+  return false;
+}
 
   Future<void> _runText(String text) async {
     if (text.trim().isEmpty || _isLoading) return;
@@ -314,11 +301,10 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final reply = await ApiService.sendMessage(text);
 
-      final cleanReply = reply.contains("SocketException") ||
-              reply.contains("ClientException") ||
-              reply.toLowerCase().contains("connection timed out")
-          ? "Backend is not connected. Please start your Python server and check your Wi-Fi IP."
-          : reply;
+     final cleanReply = reply.contains("SocketException") ||
+        reply.contains("ClientException")
+    ? "Unable to reach Gamma cloud server."
+    : reply;
 
       setState(() {
         _addBotMessage(cleanReply);
@@ -329,17 +315,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _scrollToBottom();
       await _tts.speak(cleanReply);
     } catch (e) {
-      setState(() {
-        _addBotMessage(
-          "Backend is not connected. Please start your Python server and check your Wi-Fi IP.",
-        );
-        _isLoading = false;
-      });
+  setState(() {
+    _addBotMessage('Error: $e');
+    _isLoading = false;
+  });
 
-      await _saveMessages();
-      _scrollToBottom();
-      await _tts.speak("Backend is not connected");
-    }
+  await _saveMessages();
+  _scrollToBottom();
+  await _tts.speak("An error occurred");
+}
   }
 
   Future<void> _send() async {

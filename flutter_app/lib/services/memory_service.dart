@@ -8,11 +8,13 @@ class MemoryService {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_memoryKey);
 
-    if (saved == null || saved.isEmpty) {
+    if (saved == null || saved.isEmpty) return {};
+
+    try {
+      return Map<String, dynamic>.from(jsonDecode(saved));
+    } catch (e) {
       return {};
     }
-
-    return jsonDecode(saved);
   }
 
   static Future<void> saveMemory(Map<String, dynamic> memory) async {
@@ -21,37 +23,121 @@ class MemoryService {
   }
 
   static Future<String?> handleMemoryCommand(String text) async {
-    final msg = text.toLowerCase().trim();
+    final original = text.trim();
+    final msg = original.toLowerCase();
+
     final memory = await loadMemory();
 
-    if (msg.startsWith("remember my name is ")) {
-      final name = text.substring("remember my name is ".length).trim();
-      memory["name"] = name;
-      await saveMemory(memory);
-      return "Got it. I will remember your name is $name.";
+    // ===== NAME MEMORY =====
+
+    if (msg.startsWith("remember my name is")) {
+      final name = original.substring("remember my name is".length).trim();
+
+      if (name.isNotEmpty) {
+        memory["name"] = name;
+        await saveMemory(memory);
+
+        return "Got it. I will remember your name is $name.";
+      }
     }
 
-    if (msg.contains("what is my name")) {
+    if (msg.startsWith("my name is")) {
+      final name = original.substring("my name is".length).trim();
+
+      if (name.isNotEmpty) {
+        memory["name"] = name;
+        await saveMemory(memory);
+
+        return "Nice to meet you, $name. I will remember your name.";
+      }
+    }
+
+    if (msg.contains("what is my name") ||
+        msg.contains("do you know my name")) {
       final name = memory["name"];
-      if (name != null) return "Your name is $name.";
-      return "I don't know your name yet.";
+
+      return name != null
+          ? "Your name is $name."
+          : "I don't know your name yet.";
     }
 
-    if (msg.startsWith("remember my favorite app is ")) {
-      final app = text.substring("remember my favorite app is ".length).trim();
-      memory["favorite_app"] = app;
+    // ===== FAVORITE LANGUAGE MEMORY =====
+
+   // ===== FAVORITE LANGUAGE MEMORY =====
+
+if (msg.contains("favorite language") ||
+    msg.contains("favourite language")) {
+
+  if (msg.contains("remember")) {
+    String value = "";
+
+    if (msg.contains("favorite language is")) {
+      value = original.substring(
+        original.toLowerCase().indexOf("favorite language is") +
+            "favorite language is".length,
+      ).trim();
+    } else if (msg.contains("favourite language is")) {
+      value = original.substring(
+        original.toLowerCase().indexOf("favourite language is") +
+            "favourite language is".length,
+      ).trim();
+    }
+
+    if (value.isNotEmpty) {
+      memory["favorite_language"] = value;
       await saveMemory(memory);
-      return "Got it. I will remember your favorite app is $app.";
+
+      return "Okay, I will remember that your favourite language is $value.";
+    }
+  }
+
+  if (msg.contains("what is my favorite language") ||
+      msg.contains("what is my favourite language")) {
+
+    final lang = memory["favorite_language"];
+
+    return lang != null
+        ? "Your favourite language is $lang."
+        : "I don't know your favourite language yet.";
+  }
+}
+
+    // ===== GENERAL NOTES =====
+
+    if (msg.startsWith("remember that ")) {
+      final note = original.substring("remember that ".length).trim();
+
+      if (note.isNotEmpty) {
+        final notes = List<String>.from(memory["notes"] ?? []);
+
+        notes.add(note);
+
+        memory["notes"] = notes;
+
+        await saveMemory(memory);
+
+        return "Okay, I will remember that.";
+      }
     }
 
-    if (msg.contains("what is my favorite app")) {
-      final app = memory["favorite_app"];
-      if (app != null) return "Your favorite app is $app.";
-      return "I don't know your favorite app yet.";
+    // ===== SHOW MEMORY =====
+
+    if (msg.contains("what do you remember") ||
+        msg.contains("show memory")) {
+      if (memory.isEmpty) {
+        return "I don't remember anything yet.";
+      }
+
+      return "I remember:\n${memory.entries.map((e) => "${e.key}: ${e.value}").join("\n")}";
     }
 
-    if (msg.contains("forget my memory")) {
+    // ===== CLEAR MEMORY =====
+
+    if (msg.contains("forget my memory") ||
+        msg.contains("clear memory") ||
+        msg.contains("forget everything")) {
       await saveMemory({});
+
       return "I cleared your saved memory.";
     }
 
